@@ -1,0 +1,21 @@
+# Streamlit secrets
+.streamlit/
+.streamlit/secrets.toml
+
+# Data files
+*.xlsx
+*.csv
+
+# Python
+__pycache__/
+*.pyc
+
+# Environment
+venv/
+env/
+
+# IDE
+.vscode/
+
+# OS
+.DS_Store
