@@ -446,12 +446,9 @@ with tab1:
 
     for i in range(st.session_state.get('qty_keyword_count', 1)):
         qty_count = st.session_state.get('qty_keyword_count', 1)
-        if qty_count > 1:
-            cols = st.sidebar.columns([3, 2, 0.5])
-        else:
-            cols = st.sidebar.columns([3, 2])
+        col_kw, col_val = st.sidebar.columns([3, 2])
 
-        with cols[0]:
+        with col_kw:
             selected_kw_idx = st.selectbox(
                 f"工種 {i+1}",
                 options=range(len(qty_options)),
@@ -460,7 +457,7 @@ with tab1:
             )
             selected_kw = qty_options[selected_kw_idx] if selected_kw_idx < len(qty_options) else "（選択してください）"
 
-        with cols[1]:
+        with col_val:
             if selected_kw and selected_kw != "（選択してください）":
                 unit, step_size = QUANTITY_KEYWORDS.get(selected_kw, ("", 1))
                 qty_val = st.number_input(
@@ -474,9 +471,7 @@ with tab1:
                 st.text_input("単位", value="—", disabled=True, key=f"qty_kw_unit_placeholder_{i}")
 
         if qty_count > 1:
-            with cols[2]:
-                st.markdown("<div style='margin-top:1.6rem;'></div>", unsafe_allow_html=True)
-                st.button("✕", key=f"del_qty_{i}", on_click=remove_qty_row, args=(i,))
+            st.sidebar.button(f"✖ 工種 {i+1} を削除", key=f"del_qty_{i}", on_click=remove_qty_row, args=(i,))
 
     st.sidebar.button(
         "+ 数量条件を追加",
