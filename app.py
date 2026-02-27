@@ -9,7 +9,7 @@ from streamlit_gsheets import GSheetsConnection
 st.set_page_config(page_title="工事実績管理DB", layout="wide")
 
 # ==========================================
-# 🔐 セキュリティ設定（厳易パスワード認証）
+# 🔒 セキュリティ設定（簡易パスワード認証）
 # ==========================================
 def check_password():
     """パスワード認証が通っていなければ入力を求め、停止する"""
@@ -21,7 +21,7 @@ def check_password():
         return True
 
     # 画面表示
-    st.title("🔐 ログインが必要です")
+    st.title("🔒 ログインが必要です")
 
     # secrets.tomlにパスワードがない場合の安全策
     if "PASSWORD" not in st.secrets:
@@ -172,7 +172,7 @@ def load_data():
     # --- 工事データ ---
     core_k_cols = [
         '工事名', '工事概要（主な工種、規格、数量）', '工種名', '金額',
-        '竣工日', '着手日', '現場代理人', '監理技術者', '主任技術者',
+        '竣工日', '着手日', '現場代理人a', '監理技術者', '主任技術者',
         '現場担当者１', '現場担当者２', '工事場所', 'JV比率', '特記工法'
     ]
     try:
@@ -249,7 +249,7 @@ df_kouji_raw, df_eng_raw = load_data()
 # =========================
 # タブ画面構成
 # =========================
-tab1, tab2, tab3 = st.tabs(["🔍 実績検索", "✏️ 工事データ登録・編集", "🧑 技術者登録・編集"])
+tab1, tab2, tab3 = st.tabs(["🔍 実績検索", "✏️ 工事データ登録・編集", "👤 技術者登録・編集"])
 
 # --- タブ1: 検索（技術者ベース × 実績条件） ---
 with tab1:
@@ -390,8 +390,12 @@ with tab1:
         # 数量キーワード検索もリセット
         st.session_state['qty_keyword_count'] = 1
         for k in list(st.session_state.keys()):
-            if k.startswith('qty_kw_select_') or k.startswith('qty_kw_value_'):
-                del st.session_state[k]
+            if k.startswith('qty_kw_select_'):
+                st.session_state[k] = 0  # selectboxのインデックスを0（未選択）に
+            elif k.startswith('qty_kw_value_'):
+                st.session_state[k] = 0.0
+            elif k.startswith('qty_kw_unit_placeholder_'):
+                pass  # そのまま
 
     if st.sidebar.button("🔄 データの再読み込み"):
         st.cache_data.clear()
@@ -406,7 +410,7 @@ with tab1:
         if val:
             keywords.append(val)
         if i == 0:
-            st.sidebar.button("+ キーワード枠を追加", on_click=lambda: st.session_state.update({'keyword_count': st.session_state.get('keyword_count', 1) + 1}), key="add_keyword_btn")
+            st.sidebar.button("+ キーワード欄追加", on_click=lambda: st.session_state.update({'keyword_count': st.session_state.get('keyword_count', 1) + 1}), key="add_keyword_btn")
 
     # ========================================================
     # 数量キーワード検索セクション（フォーム外に配置）
@@ -415,15 +419,47 @@ with tab1:
     st.sidebar.caption("工種を選択し、数量の下限値を指定して検索できます")
 
     qty_keyword_list = list(QUANTITY_KEYWORDS.keys())
+    qty_options = ["（選択してください）"] + qty_keyword_list
+
+    def remove_qty_row(row_idx):
+        """数量条件行を削除する"""
+        count = st.session_state.get('qty_keyword_count', 1)
+        if count <= 1:
+            # 最後の1行は削除せずリセットのみ
+            st.session_state[f'qty_kw_select_{row_idx}'] = 0
+            if f'qty_kw_value_{row_idx}' in st.session_state:
+                st.session_state[f'qty_kw_value_{row_idx}'] = 0.0
+            return
+        # 削除対象以降の行を前にずらす
+        for j in range(row_idx, count - 1):
+            next_sel = st.session_state.get(f'qty_kw_select_{j+1}', 0)
+            next_val = st.session_state.get(f'qty_kw_value_{j+1}', 0.0)
+            st.session_state[f'qty_kw_select_{j}'] = next_sel
+            st.session_state[f'qty_kw_value_{j}'] = next_val
+        # 最後の行のキーを削除
+        last = count - 1
+        for prefix in ['qty_kw_select_', 'qty_kw_value_', 'qty_kw_unit_placeholder_']:
+            k = f'{prefix}{last}'
+            if k in st.session_state:
+                del st.session_state[k]
+        st.session_state['qty_keyword_count'] = count - 1
 
     for i in range(st.session_state.get('qty_keyword_count', 1)):
-        cols = st.sidebar.columns([3, 2])
+        qty_count = st.session_state.get('qty_keyword_count', 1)
+        if qty_count > 1:
+            cols = st.sidebar.columns([3, 2, 0.5])
+        else:
+            cols = st.sidebar.columns([3, 2])
+
         with cols[0]:
-            selected_kw = st.selectbox(
+            selected_kw_idx = st.selectbox(
                 f"工種 {i+1}",
-                options=["（選択してください）"] + qty_keyword_list,
+                options=range(len(qty_options)),
+                format_func=lambda x: qty_options[x],
                 key=f"qty_kw_select_{i}"
             )
+            selected_kw = qty_options[selected_kw_idx] if selected_kw_idx < len(qty_options) else "（選択してください）"
+
         with cols[1]:
             if selected_kw and selected_kw != "（選択してください）":
                 unit, step_size = QUANTITY_KEYWORDS.get(selected_kw, ("", 1))
@@ -437,14 +473,18 @@ with tab1:
             else:
                 st.text_input("単位", value="—", disabled=True, key=f"qty_kw_unit_placeholder_{i}")
 
-        if i == 0:
-            st.sidebar.button(
-                "+ 数量条件を追加",
-                on_click=lambda: st.session_state.update({
-                    'qty_keyword_count': st.session_state.get('qty_keyword_count', 1) + 1
-                }),
-                key="add_qty_keyword_btn"
-            )
+        if qty_count > 1:
+            with cols[2]:
+                st.markdown("<div style='margin-top:1.6rem;'></div>", unsafe_allow_html=True)
+                st.button("✕", key=f"del_qty_{i}", on_click=remove_qty_row, args=(i,))
+
+    st.sidebar.button(
+        "+ 数量条件を追加",
+        on_click=lambda: st.session_state.update({
+            'qty_keyword_count': st.session_state.get('qty_keyword_count', 1) + 1
+        }),
+        key="add_qty_keyword_btn"
+    )
 
     with st.sidebar.form("search_form"):
         step_val = 1000000
@@ -461,7 +501,7 @@ with tab1:
         with c2:
             end_year = st.selectbox("終了年", years, key='end_year_key')
 
-        st.markdown("### 🧑 技術者名で検索 (複数可)")
+        st.markdown("### 👤 技術者名で検索 (複数可)")
         target_names = st.multiselect("指名検索", active_names, key='target_names_key')
 
         st.markdown("### 🎫 保有資格で検索")
@@ -490,8 +530,9 @@ with tab1:
         # 数量キーワード条件を取得
         qty_conditions = []
         for i in range(st.session_state.get('qty_keyword_count', 1)):
-            sel_kw = st.session_state.get(f'qty_kw_select_{i}', '（選択してください）')
-            if sel_kw and sel_kw != '（選択してください）':
+            sel_kw_idx = st.session_state.get(f'qty_kw_select_{i}', 0)
+            if isinstance(sel_kw_idx, int) and sel_kw_idx > 0 and sel_kw_idx < len(qty_options):
+                sel_kw = qty_options[sel_kw_idx]
                 min_val = st.session_state.get(f'qty_kw_value_{i}', 0.0)
                 if min_val > 0:
                     qty_conditions.append((sel_kw, min_val))
@@ -597,7 +638,7 @@ with tab1:
             for kw, min_val in qty_conditions:
                 unit, _ = QUANTITY_KEYWORDS.get(kw, ("", 1))
                 cond_texts.append(f"**{kw}** {min_val:,.0f}{unit}以上")
-            st.info("📋 数量条件: " + " / ".join(cond_texts))
+            st.info("📋 数量条件: " + " ／ ".join(cond_texts))
 
         st.subheader(f"検索結果: {len(results)} 名")
         st.write("---")
@@ -606,9 +647,9 @@ with tab1:
             data = results[name]
             qual_display = data['qualification']
             if qual_display and qual_display.lower() != 'nan':
-                st.markdown(f"### 🧑 {name} 【{qual_display}】")
+                st.markdown(f"### 👤 {name} 【{qual_display}】")
             else:
-                st.markdown(f"### 🧑 {name}")
+                st.markdown(f"### 👤 {name}")
 
             p_df = pd.DataFrame(data['projects'])
             if not p_df.empty:
@@ -666,7 +707,7 @@ with tab2:
 
 # --- タブ3: 技術者登録 ---
 with tab3:
-    st.header("🧑 技術者情報の管理")
+    st.header("👤 技術者情報の管理")
     st.info("技術者の追加・修正を行い「保存」を押してください。（保存ボタンを押すまで反映されません）")
 
     e_col_cfg = {
@@ -701,3 +742,4 @@ with tab3:
                 st.success(f"シート「{ENGINEER_SHEET}」に上書き保存しました！")
                 st.cache_data.clear()
                 st.rerun()
+"
