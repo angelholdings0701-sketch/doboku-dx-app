@@ -384,6 +384,7 @@ with tab1:
         st.session_state['target_names_key'] = []
         st.session_state['target_quals_key'] = []
         st.session_state['role_key'] = []
+        st.session_state['keyword_count'] = 1
         for k in list(st.session_state.keys()):
             if k.startswith('kw_input_'):
                 st.session_state[k] = ""
@@ -404,13 +405,31 @@ with tab1:
 
     # キーワード検索セクション（フォーム外に配置）
     st.sidebar.markdown("### 🔍 キーワード検索 (AND条件)")
+
+    def remove_keyword_row(row_idx):
+        """キーワード行を削除する"""
+        count = st.session_state.get('keyword_count', 1)
+        if count <= 1:
+            st.session_state[f'kw_input_{row_idx}'] = ""
+            return
+        for j in range(row_idx, count - 1):
+            next_val = st.session_state.get(f'kw_input_{j+1}', "")
+            st.session_state[f'kw_input_{j}'] = next_val
+        last = count - 1
+        k = f'kw_input_{last}'
+        if k in st.session_state:
+            del st.session_state[k]
+        st.session_state['keyword_count'] = count - 1
+
     keywords = []
-    for i in range(st.session_state.get('keyword_count', 1)):
+    kw_count = st.session_state.get('keyword_count', 1)
+    for i in range(kw_count):
         val = st.sidebar.text_input(f"キーワード {i+1}", key=f"kw_input_{i}")
         if val:
             keywords.append(val)
-        if i == 0:
-            st.sidebar.button("+ キーワード欄追加", on_click=lambda: st.session_state.update({'keyword_count': st.session_state.get('keyword_count', 1) + 1}), key="add_keyword_btn")
+        if kw_count > 1:
+            st.sidebar.button(f"✖ キーワード {i+1} を削除", key=f"del_kw_{i}", on_click=remove_keyword_row, args=(i,))
+    st.sidebar.button("+ キーワード欄追加", on_click=lambda: st.session_state.update({'keyword_count': st.session_state.get('keyword_count', 1) + 1}), key="add_keyword_btn")
 
     # ========================================================
     # 数量キーワード検索セクション（フォーム外に配置）
