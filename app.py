@@ -9,33 +9,148 @@ from streamlit_gsheets import GSheetsConnection
 # === ページ設定 ===
 st.set_page_config(page_title="工事実績管理DB", layout="wide")
 
-# === data_editor の Enter キー動作変更（2回Enterで確定） ===
+# === data_editor カスタマイズ（Enterキー + メニュー日本語化 + 項目追加/削除） ===
 components.html("""
 <script>
 (function() {
     const doc = window.parent.document;
-    let lastEnterTime = 0;
-    const THRESHOLD = 500;
 
+    // --- 2回Enterで確定 ---
+    let lastEnterTime = 0;
     doc.addEventListener('keydown', function(e) {
         if (e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.metaKey) return;
-
-        // Glide Data Grid の編集用テキストエリアかどうか判定
         const active = doc.activeElement;
-        if (!active) return;
-        if (!active.classList.contains('gdg-input')) return;
-
+        if (!active || !active.classList.contains('gdg-input')) return;
         const now = Date.now();
-        if (now - lastEnterTime > THRESHOLD) {
-            // 1回目のEnter → 確定させない
+        if (now - lastEnterTime > 500) {
             e.preventDefault();
             e.stopImmediatePropagation();
             lastEnterTime = now;
         } else {
-            // 2回目のEnter（短時間内）→ 確定を許可
             lastEnterTime = 0;
         }
     }, true);
+
+    // --- カラムヘッダーメニューのカスタマイズ ---
+    function getActiveTarget() {
+        const tabs = doc.querySelectorAll('[role="tab"][aria-selected="true"]');
+        for (const tab of tabs) {
+            const t = tab.textContent || '';
+            if (t.includes('工事')) return 'kouji';
+            if (t.includes('技術者')) return 'eng';
+        }
+        return 'kouji';
+    }
+
+    function getColumnName(menuRoot) {
+        const skip = ['列幅を自動調整','列を固定','列を非表示','項目を追加','項目を削除',
+                       'Autosize','Pin column','Hide column'];
+        const spans = menuRoot.querySelectorAll('span');
+        for (const s of spans) {
+            const t = s.textContent.trim();
+            if (t && t.length < 30 && !skip.includes(t) && s.children.length === 0) {
+                return t;
+            }
+        }
+        return '';
+    }
+
+    function customizeMenu(menuRoot) {
+        if (menuRoot.dataset.customized) return;
+        menuRoot.dataset.customized = '1';
+
+        // 1. テキスト翻訳
+        const trans = {'Autosize':'列幅を自動調整','Pin column':'列を固定','Hide column':'列を非表示'};
+        let hideItem = null;
+        const walker = doc.createTreeWalker(menuRoot, NodeFilter.SHOW_TEXT);
+        while (walker.nextNode()) {
+            const tn = walker.currentNode;
+            const t = tn.textContent.trim();
+            if (trans[t]) {
+                tn.textContent = tn.textContent.replace(t, trans[t]);
+                if (t === 'Hide column') {
+                    let p = tn.parentElement;
+                    while (p && p !== menuRoot) {
+                        if (p.style.cursor === 'pointer' || p.onclick ||
+                            p.getAttribute('role') === 'menuitem' ||
+                            p.parentElement === menuRoot ||
+                            p.parentElement?.children.length > 2) {
+                            hideItem = p;
+                            break;
+                        }
+                        p = p.parentElement;
+                    }
+                    if (!hideItem) hideItem = tn.parentElement;
+                }
+            }
+        }
+
+        if (!hideItem) return;
+
+        // 2. メニューアイテム追加用のヘルパー
+        function createItem(label, color, onClick) {
+            const item = hideItem.cloneNode(true);
+            const w = doc.createTreeWalker(item, NodeFilter.SHOW_TEXT);
+            let replaced = false;
+            while (w.nextNode()) {
+                if (w.currentNode.textContent.includes('列を非表示') && !replaced) {
+                    w.currentNode.textContent = w.currentNode.textContent.replace('列を非表示', label);
+                    replaced = true;
+                }
+            }
+            // SVGアイコンを変更
+            const svg = item.querySelector('svg');
+            if (svg) svg.remove();
+            item.style.color = color;
+            item.addEventListener('click', function(e) {
+                e.preventDefault();
+                e.stopPropagation();
+                onClick();
+            });
+            return item;
+        }
+
+        // 3. 「項目を削除」
+        const delItem = createItem('🗑 項目を削除', '#ff6b6b', function() {
+            const col = getColumnName(menuRoot);
+            const target = getActiveTarget();
+            if (!col) { alert('列名を取得できませんでした'); return; }
+            if (confirm('「' + col + '」を削除しますか？\\n保存ボタンを押すとスプレッドシートにも反映されます。')) {
+                const url = new URL(window.parent.location.href);
+                url.searchParams.set('del_col', col);
+                url.searchParams.set('target', target);
+                window.parent.location.href = url.toString();
+            }
+        });
+        hideItem.parentElement.insertBefore(delItem, hideItem.nextSibling);
+
+        // 4. 「項目を追加」
+        const addItem = createItem('➕ 項目を追加', '#51cf66', function() {
+            const target = getActiveTarget();
+            const newCol = prompt('追加する項目名を入力してください:');
+            if (newCol && newCol.trim()) {
+                const url = new URL(window.parent.location.href);
+                url.searchParams.set('add_col', newCol.trim());
+                url.searchParams.set('target', target);
+                window.parent.location.href = url.toString();
+            }
+        });
+        hideItem.parentElement.insertBefore(addItem, delItem.nextSibling);
+    }
+
+    // MutationObserver でメニュー出現を検知
+    const obs = new MutationObserver(function(muts) {
+        for (const m of muts) {
+            for (const node of m.addedNodes) {
+                if (node.nodeType !== 1) continue;
+                const txt = node.textContent || '';
+                if (txt.includes('Autosize') && txt.includes('Hide column')) {
+                    requestAnimationFrame(() => customizeMenu(node));
+                }
+            }
+        }
+    });
+    obs.observe(doc.body || doc.documentElement, { childList: true, subtree: true });
 })();
 </script>
 """, height=0, width=0)
@@ -277,6 +392,33 @@ def save_engineer(df):
 
 # データ読み込み
 df_kouji_raw, df_eng_raw = load_data()
+
+# =========================
+# メニューからの列追加・削除（クエリパラメータ経由）
+# =========================
+_qp = st.query_params
+_add_col = _qp.get("add_col")
+_del_col = _qp.get("del_col")
+_target = _qp.get("target", "kouji")
+
+if _add_col:
+    key = f"extra_cols_{_target}"
+    if key not in st.session_state:
+        st.session_state[key] = []
+    src_df = df_kouji_raw if _target == "kouji" else df_eng_raw
+    if _add_col not in src_df.columns and _add_col not in st.session_state[key]:
+        st.session_state[key].append(_add_col)
+    st.query_params.clear()
+    st.rerun()
+
+if _del_col:
+    key = f"del_cols_{_target}"
+    if key not in st.session_state:
+        st.session_state[key] = []
+    if _del_col not in st.session_state[key]:
+        st.session_state[key].append(_del_col)
+    st.query_params.clear()
+    st.rerun()
 
 # =========================
 # タブ画面構成
@@ -750,6 +892,13 @@ with tab2:
         if col not in df_kouji_raw.columns:
             df_kouji_raw[col] = None
 
+    # session_stateに保持された削除列をDataFrameから除外
+    if "del_cols_kouji" in st.session_state and st.session_state.del_cols_kouji:
+        st.warning(f"削除予定の項目: {', '.join(st.session_state.del_cols_kouji)}（保存で確定）")
+        for col in st.session_state.del_cols_kouji:
+            if col in df_kouji_raw.columns:
+                df_kouji_raw = df_kouji_raw.drop(columns=[col])
+
     k_col_cfg = {}
     if not df_kouji_raw.empty:
         for c in df_kouji_raw.columns:
@@ -774,6 +923,7 @@ with tab2:
             if save_kouji(edited_kouji):
                 st.success(f"シート「{KOUJI_SHEET}」に上書き保存しました！")
                 st.session_state.extra_cols_kouji = []
+                st.session_state.del_cols_kouji = []
                 st.cache_data.clear()
                 st.rerun()
 
@@ -807,6 +957,13 @@ with tab3:
         if col not in df_eng_raw.columns:
             df_eng_raw[col] = None
 
+    # session_stateに保持された削除列をDataFrameから除外
+    if "del_cols_eng" in st.session_state and st.session_state.del_cols_eng:
+        st.warning(f"削除予定の項目: {', '.join(st.session_state.del_cols_eng)}（保存で確定）")
+        for col in st.session_state.del_cols_eng:
+            if col in df_eng_raw.columns:
+                df_eng_raw = df_eng_raw.drop(columns=[col])
+
     e_col_cfg = {
         "在籍状況": st.column_config.CheckboxColumn("在籍", default=True),
         "技術者ID": st.column_config.TextColumn("技術者ID", width="medium", required=True),
@@ -838,5 +995,6 @@ with tab3:
             if save_engineer(edited_eng):
                 st.success(f"シート「{ENGINEER_SHEET}」に上書き保存しました！")
                 st.session_state.extra_cols_eng = []
+                st.session_state.del_cols_eng = []
                 st.cache_data.clear()
                 st.rerun()
