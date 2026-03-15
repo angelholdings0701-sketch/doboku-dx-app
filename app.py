@@ -15,21 +15,15 @@ components.html("""
 (function() {
     const doc = window.parent.document;
     let lastEnterTime = 0;
-    const THRESHOLD = 500; // ミリ秒以内に2回Enterで確定
+    const THRESHOLD = 500;
 
     doc.addEventListener('keydown', function(e) {
         if (e.key !== 'Enter' || e.shiftKey || e.ctrlKey || e.metaKey) return;
 
-        // data_editor内のセル編集中かどうか判定
+        // Glide Data Grid の編集用テキストエリアかどうか判定
         const active = doc.activeElement;
         if (!active) return;
-
-        const inDataEditor = active.closest('[data-testid="stDataFrame"]')
-            || active.closest('[data-testid="stDataFrameResizable"]')
-            || active.closest('.dvn-scroller')
-            || active.closest('.dvn-stack');
-
-        if (!inDataEditor) return;
+        if (!active.classList.contains('gdg-input')) return;
 
         const now = Date.now();
         if (now - lastEnterTime > THRESHOLD) {
@@ -41,7 +35,7 @@ components.html("""
             // 2回目のEnter（短時間内）→ 確定を許可
             lastEnterTime = 0;
         }
-    }, true); // capture phase で先にキャッチ
+    }, true);
 })();
 </script>
 """, height=0, width=0)
