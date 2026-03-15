@@ -106,7 +106,7 @@ components.html("""
                             return item;
                         }
 
-                        // 3. メニューから列名を取得するヘルパー
+                        // 3. メニューから列名を取得
                         function getColumnName() {
                             const skip = ['列幅を自動調整','列を固定','列を非表示','書式',
                                           '🗑 項目を削除','➕ 項目を追加'];
@@ -120,40 +120,53 @@ components.html("""
                             return '';
                         }
 
-                        // 4. hidden inputに列名をセットしてからボタンクリック
-                        function getActiveTarget() {
-                            const tabs = doc.querySelectorAll('[role="tab"][aria-selected="true"]');
-                            for (const tab of tabs) {
-                                const t = tab.textContent || '';
-                                if (t.includes('工事')) return 'kouji';
-                                if (t.includes('技術者')) return 'eng';
-                            }
-                            return 'kouji';
-                        }
-
-                        function setHiddenInputAndClick(colName) {
-                            const target = getActiveTarget();
-                            const ph = '__del_target_' + target + '__';
-                            const input = doc.querySelector('input[placeholder="' + ph + '"]');
-                            if (input) {
-                                const setter = Object.getOwnPropertyDescriptor(
-                                    window.parent.HTMLInputElement.prototype, 'value'
-                                ).set;
-                                setter.call(input, colName);
-                                input.dispatchEvent(new Event('input', { bubbles: true }));
-                            }
-                            setTimeout(function() {
-                                clickButtonInActiveTab('項目を削除');
-                            }, 200);
+                        // 4. ダイアログを開き、セレクトボックスで列を自動選択
+                        function openDeleteAndSelect(colName) {
+                            clickButtonInActiveTab('項目を削除');
+                            if (!colName) return;
+                            // ダイアログが開くのを待ってセレクトボックスを操作
+                            var attempts = 0;
+                            var checker = setInterval(function() {
+                                attempts++;
+                                if (attempts > 50) { clearInterval(checker); return; }
+                                var modal = doc.querySelector('[data-testid="stModal"]');
+                                if (!modal) return;
+                                var sbInput = modal.querySelector('[data-baseweb="select"] input');
+                                if (!sbInput) return;
+                                clearInterval(checker);
+                                // セレクトボックスをクリックして開く
+                                sbInput.focus();
+                                sbInput.click();
+                                setTimeout(function() {
+                                    // 列名を入力してフィルタ
+                                    var nativeSetter = Object.getOwnPropertyDescriptor(
+                                        window.parent.HTMLInputElement.prototype, 'value'
+                                    ).set;
+                                    nativeSetter.call(sbInput, colName);
+                                    sbInput.dispatchEvent(new Event('input', { bubbles: true }));
+                                    // 一致するオプションをクリック
+                                    setTimeout(function() {
+                                        var opts = doc.querySelectorAll('[role="option"]');
+                                        for (var i = 0; i < opts.length; i++) {
+                                            if (opts[i].textContent.trim() === colName) {
+                                                opts[i].click();
+                                                return;
+                                            }
+                                        }
+                                        // 完全一致がなければ部分一致
+                                        for (var j = 0; j < opts.length; j++) {
+                                            if (opts[j].textContent.includes(colName) || colName.includes(opts[j].textContent.trim())) {
+                                                opts[j].click();
+                                                return;
+                                            }
+                                        }
+                                    }, 300);
+                                }, 200);
+                            }, 100);
                         }
 
                         const delBtn = makeItem('🗑 項目を削除', '#ff6b6b', function() {
-                            const col = getColumnName();
-                            if (col) {
-                                setHiddenInputAndClick(col);
-                            } else {
-                                clickButtonInActiveTab('項目を削除');
-                            }
+                            openDeleteAndSelect(getColumnName());
                         });
                         hideItem.parentElement.insertBefore(delBtn, hideItem.nextSibling);
 
@@ -443,13 +456,7 @@ def dialog_del_column(target):
     if not all_cols:
         st.warning("データがありません。")
         return
-    # メニューからの列名を取得してpre-select
-    preselect = st.session_state.get(f"_del_target_{target}", "")
-    if preselect and preselect in all_cols:
-        idx = all_cols.index(preselect)
-    else:
-        idx = None
-    sel_col = st.selectbox("削除する項目を選択", all_cols, index=idx, placeholder="削除する項目を選んでください")
+    sel_col = st.selectbox("削除する項目を選択", all_cols, index=None, placeholder="削除する項目を選んでください")
     if sel_col:
         st.warning(f"⚠️ 「**{sel_col}**」を削除します。「保存」ボタンを押すとスプレッドシートからも完全に削除されます。元に戻せません。")
         if st.button(f"🗑 「{sel_col}」を削除する", type="primary", use_container_width=True):
@@ -461,8 +468,6 @@ def dialog_del_column(target):
             # extra_colsからも除去
             if sel_col in st.session_state.get(extra_key, []):
                 st.session_state[extra_key].remove(sel_col)
-            # pre-selectをクリア
-            st.session_state[f"_del_target_{target}"] = ""
             st.rerun()
     else:
         st.info("削除する項目を選択してください。")
@@ -928,10 +933,6 @@ with tab2:
             if col in df_kouji_raw.columns:
                 df_kouji_raw = df_kouji_raw.drop(columns=[col])
 
-    # Hidden input（メニューから列名を受け取る）
-    st.markdown('<style>div:has(> div > input[placeholder^="__del_target"]) { position:absolute; opacity:0; height:0; overflow:hidden; pointer-events:none; }</style>', unsafe_allow_html=True)
-    st.text_input("_", key="_del_target_kouji", placeholder="__del_target_kouji__", label_visibility="collapsed")
-
     btn_k1, btn_k2, btn_k3 = st.columns([1, 1, 3])
     with btn_k1:
         if st.button("➕ 項目を追加", key="btn_add_col_kouji"):
@@ -986,9 +987,6 @@ with tab3:
         for col in st.session_state.del_cols_eng:
             if col in df_eng_raw.columns:
                 df_eng_raw = df_eng_raw.drop(columns=[col])
-
-    # Hidden input（メニューから列名を受け取る）
-    st.text_input("_", key="_del_target_eng", placeholder="__del_target_eng__", label_visibility="collapsed")
 
     btn_e1, btn_e2, btn_e3 = st.columns([1, 1, 3])
     with btn_e1:
