@@ -108,8 +108,16 @@ components.html("""
 
                         // 3. メニューから列名を取得
                         function getColumnName() {
+                            // Glide Data Grid メニュー上部の入力フィールドから列名を取得
+                            var inp = node.querySelector('input');
+                            if (inp && inp.value && inp.value.trim()) {
+                                return inp.value.trim();
+                            }
+                            // フォールバック: span から探す
                             const skip = ['列幅を自動調整','列を固定','列を非表示','書式',
-                                          '🗑 項目を削除','➕ 項目を追加'];
+                                          '🗑 項目を削除','➕ 項目を追加',
+                                          'tag','tags','notes','text','number','boolean',
+                                          'Autosize','Pin column','Hide column','Format'];
                             const spans = node.querySelectorAll('span');
                             for (const s of spans) {
                                 const t = s.textContent.trim();
