@@ -15,13 +15,11 @@ components.html("""
 (function() {
     const doc = window.parent.document;
 
-    // --- 削除ダイアログ自動選択（DOM隠し要素から列名を読み取り） ---
+    // --- 削除ダイアログ自動選択（親windowグローバル変数から列名を読み取り） ---
     (function autoSelectDeleteCol() {
-        var marker = doc.getElementById('__pendingDeleteCol');
-        if (!marker) return;
-        var colName = marker.getAttribute('data-col');
-        marker.remove();
+        var colName = window.parent.__pendingDeleteCol;
         if (!colName) return;
+        delete window.parent.__pendingDeleteCol;
         var attempts = 0;
         var checker = setInterval(function() {
             attempts++;
@@ -171,19 +169,11 @@ components.html("""
                             return '';
                         }
 
-                        // 4. 列名をDOM隠し要素に保存してボタンクリック
+                        // 4. 列名を親windowグローバル変数に保存してボタンクリック
                         const delBtn = makeItem('🗑 項目を削除', '#ff6b6b', function() {
                             var colName = getColumnName();
-                            // 既存マーカーを削除
-                            var old = doc.getElementById('__pendingDeleteCol');
-                            if (old) old.remove();
-                            // 新規マーカーを作成（列名をdata属性に保存）
                             if (colName) {
-                                var marker = doc.createElement('div');
-                                marker.id = '__pendingDeleteCol';
-                                marker.setAttribute('data-col', colName);
-                                marker.style.display = 'none';
-                                doc.body.appendChild(marker);
+                                window.parent.__pendingDeleteCol = colName;
                             }
                             clickButtonInActiveTab('項目を削除');
                         });
