@@ -725,6 +725,31 @@ with tab2:
     st.header("✏️ 工事実績データの管理")
     st.info("データの追加・修正を行い「保存」を押してください。（保存ボタンを押すまで反映されません）")
 
+    # --- 項目（列）追加 UI ---
+    if "extra_cols_kouji" not in st.session_state:
+        st.session_state.extra_cols_kouji = []
+
+    with st.expander("➕ 項目（列）を追加する"):
+        col_k1, col_k2 = st.columns([3, 1])
+        with col_k1:
+            new_col_kouji = st.text_input("追加する項目名", key="new_col_kouji", placeholder="例: 備考")
+        with col_k2:
+            st.write("")  # スペーサー
+            add_col_kouji = st.button("項目を追加", key="add_col_kouji_btn", type="primary")
+        if add_col_kouji and new_col_kouji:
+            if new_col_kouji in df_kouji_raw.columns or new_col_kouji in st.session_state.extra_cols_kouji:
+                st.warning(f"「{new_col_kouji}」は既に存在します。")
+            else:
+                st.session_state.extra_cols_kouji.append(new_col_kouji)
+                st.rerun()
+        if st.session_state.extra_cols_kouji:
+            st.caption(f"追加予定の項目: {', '.join(st.session_state.extra_cols_kouji)}")
+
+    # session_stateに保持された追加列をDataFrameに反映
+    for col in st.session_state.extra_cols_kouji:
+        if col not in df_kouji_raw.columns:
+            df_kouji_raw[col] = None
+
     k_col_cfg = {}
     if not df_kouji_raw.empty:
         for c in df_kouji_raw.columns:
@@ -748,6 +773,7 @@ with tab2:
         if not edited_kouji.empty:
             if save_kouji(edited_kouji):
                 st.success(f"シート「{KOUJI_SHEET}」に上書き保存しました！")
+                st.session_state.extra_cols_kouji = []
                 st.cache_data.clear()
                 st.rerun()
 
@@ -755,6 +781,31 @@ with tab2:
 with tab3:
     st.header("👤 技術者情報の管理")
     st.info("技術者の追加・修正を行い「保存」を押してください。（保存ボタンを押すまで反映されません）")
+
+    # --- 項目（列）追加 UI ---
+    if "extra_cols_eng" not in st.session_state:
+        st.session_state.extra_cols_eng = []
+
+    with st.expander("➕ 項目（列）を追加する"):
+        col_e1, col_e2 = st.columns([3, 1])
+        with col_e1:
+            new_col_eng = st.text_input("追加する項目名", key="new_col_eng", placeholder="例: 電話番号")
+        with col_e2:
+            st.write("")  # スペーサー
+            add_col_eng = st.button("項目を追加", key="add_col_eng_btn", type="primary")
+        if add_col_eng and new_col_eng:
+            if new_col_eng in df_eng_raw.columns or new_col_eng in st.session_state.extra_cols_eng:
+                st.warning(f"「{new_col_eng}」は既に存在します。")
+            else:
+                st.session_state.extra_cols_eng.append(new_col_eng)
+                st.rerun()
+        if st.session_state.extra_cols_eng:
+            st.caption(f"追加予定の項目: {', '.join(st.session_state.extra_cols_eng)}")
+
+    # session_stateに保持された追加列をDataFrameに反映
+    for col in st.session_state.extra_cols_eng:
+        if col not in df_eng_raw.columns:
+            df_eng_raw[col] = None
 
     e_col_cfg = {
         "在籍状況": st.column_config.CheckboxColumn("在籍", default=True),
@@ -786,5 +837,6 @@ with tab3:
         if not edited_eng.empty:
             if save_engineer(edited_eng):
                 st.success(f"シート「{ENGINEER_SHEET}」に上書き保存しました！")
+                st.session_state.extra_cols_eng = []
                 st.cache_data.clear()
                 st.rerun()
