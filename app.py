@@ -132,44 +132,43 @@ components.html("""
                         function openDeleteAndSelect(colName) {
                             clickButtonInActiveTab('項目を削除');
                             if (!colName) return;
-                            // ダイアログが開くのを待ってセレクトボックスを操作
+                            // ダイアログが開くのを待つ
                             var attempts = 0;
                             var checker = setInterval(function() {
                                 attempts++;
-                                if (attempts > 50) { clearInterval(checker); return; }
+                                if (attempts > 60) { clearInterval(checker); return; }
                                 var dialog = doc.querySelector('[role="dialog"]');
                                 if (!dialog) return;
                                 var sbInput = dialog.querySelector('input[role="combobox"]');
                                 if (!sbInput) return;
                                 clearInterval(checker);
-                                // セレクトボックスをクリックして開く
+                                // ステップ1: セレクトボックスをクリックしてドロップダウンを開く
                                 sbInput.focus();
                                 sbInput.click();
-                                setTimeout(function() {
-                                    // 列名を入力してフィルタ
-                                    var nativeSetter = Object.getOwnPropertyDescriptor(
-                                        window.parent.HTMLInputElement.prototype, 'value'
-                                    ).set;
-                                    nativeSetter.call(sbInput, colName);
-                                    sbInput.dispatchEvent(new Event('input', { bubbles: true }));
-                                    // 一致するオプションをクリック
-                                    setTimeout(function() {
-                                        var opts = doc.querySelectorAll('[role="option"]');
-                                        for (var i = 0; i < opts.length; i++) {
-                                            if (opts[i].textContent.trim() === colName) {
-                                                opts[i].click();
-                                                return;
-                                            }
+                                // ステップ2: ドロップダウンが開いたら直接オプションをクリック
+                                var findAttempts = 0;
+                                var finder = setInterval(function() {
+                                    findAttempts++;
+                                    if (findAttempts > 30) { clearInterval(finder); return; }
+                                    var opts = doc.querySelectorAll('[role="listbox"] [role="option"]');
+                                    if (!opts || opts.length === 0) return;
+                                    clearInterval(finder);
+                                    // 完全一致を探す
+                                    for (var i = 0; i < opts.length; i++) {
+                                        if (opts[i].textContent.trim() === colName) {
+                                            opts[i].click();
+                                            return;
                                         }
-                                        // 完全一致がなければ部分一致
-                                        for (var j = 0; j < opts.length; j++) {
-                                            if (opts[j].textContent.includes(colName) || colName.includes(opts[j].textContent.trim())) {
-                                                opts[j].click();
-                                                return;
-                                            }
+                                    }
+                                    // 部分一致を探す
+                                    for (var j = 0; j < opts.length; j++) {
+                                        var optText = opts[j].textContent.trim();
+                                        if (optText.includes(colName) || colName.includes(optText)) {
+                                            opts[j].click();
+                                            return;
                                         }
-                                    }, 300);
-                                }, 200);
+                                    }
+                                }, 100);
                             }, 100);
                         }
 
