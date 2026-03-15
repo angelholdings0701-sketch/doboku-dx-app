@@ -15,6 +15,51 @@ components.html("""
 (function() {
     const doc = window.parent.document;
 
+    // --- 削除ダイアログ自動選択（sessionStorageから列名を読み取り） ---
+    (function autoSelectDeleteCol() {
+        var colName;
+        try { colName = window.parent.sessionStorage.getItem('__pendingDeleteCol'); } catch(e) {}
+        if (!colName) return;
+        window.parent.sessionStorage.removeItem('__pendingDeleteCol');
+        var attempts = 0;
+        var checker = setInterval(function() {
+            attempts++;
+            if (attempts > 80) { clearInterval(checker); return; }
+            var dialog = doc.querySelector('[role="dialog"]');
+            if (!dialog) return;
+            var sbInput = dialog.querySelector('input[role="combobox"]');
+            if (!sbInput) return;
+            clearInterval(checker);
+            // セレクトボックスを開く
+            sbInput.focus();
+            sbInput.click();
+            // オプションが表示されるのを待つ
+            var findAttempts = 0;
+            var finder = setInterval(function() {
+                findAttempts++;
+                if (findAttempts > 40) { clearInterval(finder); return; }
+                var opts = doc.querySelectorAll('[role="option"]');
+                if (!opts || opts.length === 0) return;
+                clearInterval(finder);
+                // 完全一致を探す
+                for (var i = 0; i < opts.length; i++) {
+                    if (opts[i].textContent.trim() === colName) {
+                        opts[i].click();
+                        return;
+                    }
+                }
+                // 部分一致
+                for (var j = 0; j < opts.length; j++) {
+                    var t = opts[j].textContent.trim();
+                    if (t.includes(colName) || colName.includes(t)) {
+                        opts[j].click();
+                        return;
+                    }
+                }
+            }, 100);
+        }, 100);
+    })();
+
     // --- 2回Enterで確定 ---
     let lastEnterTime = 0;
     doc.addEventListener('keydown', function(e) {
@@ -106,74 +151,32 @@ components.html("""
                             return item;
                         }
 
-                        // 3. メニューから列名を取得
+                        // 3. メニューから列名を取得（アイコンspan除外）
                         function getColumnName() {
-                            // Glide Data Grid メニュー上部の入力フィールドから列名を取得
-                            var inp = node.querySelector('input');
-                            if (inp && inp.value && inp.value.trim()) {
-                                return inp.value.trim();
-                            }
-                            // フォールバック: span から探す
-                            const skip = ['列幅を自動調整','列を固定','列を非表示','書式',
-                                          '🗑 項目を削除','➕ 項目を追加',
-                                          'tag','tags','notes','text','number','boolean',
-                                          'Autosize','Pin column','Hide column','Format'];
                             const spans = node.querySelectorAll('span');
                             for (const s of spans) {
+                                // アイコン用spanはクラスに exvv1vr0 を含む→除外
+                                if (s.className && s.className.includes('exvv1vr0')) continue;
+                                if (s.children.length > 0) continue;
                                 const t = s.textContent.trim();
-                                if (t && t.length > 0 && t.length < 30 && !skip.includes(t) && s.children.length === 0) {
-                                    return t;
-                                }
+                                // メニュー項目テキストも除外
+                                if (!t || t.length === 0 || t.length > 50) continue;
+                                const skip = ['列幅を自動調整','列を固定','列を非表示','書式',
+                                              '🗑 項目を削除','➕ 項目を追加',
+                                              'Autosize','Pin column','Hide column','Format'];
+                                if (skip.includes(t)) continue;
+                                return t;
                             }
                             return '';
                         }
 
-                        // 4. ダイアログを開き、セレクトボックスで列を自動選択
-                        function openDeleteAndSelect(colName) {
-                            clickButtonInActiveTab('項目を削除');
-                            if (!colName) return;
-                            // ダイアログが開くのを待つ
-                            var attempts = 0;
-                            var checker = setInterval(function() {
-                                attempts++;
-                                if (attempts > 60) { clearInterval(checker); return; }
-                                var dialog = doc.querySelector('[role="dialog"]');
-                                if (!dialog) return;
-                                var sbInput = dialog.querySelector('input[role="combobox"]');
-                                if (!sbInput) return;
-                                clearInterval(checker);
-                                // ステップ1: セレクトボックスをクリックしてドロップダウンを開く
-                                sbInput.focus();
-                                sbInput.click();
-                                // ステップ2: ドロップダウンが開いたら直接オプションをクリック
-                                var findAttempts = 0;
-                                var finder = setInterval(function() {
-                                    findAttempts++;
-                                    if (findAttempts > 30) { clearInterval(finder); return; }
-                                    var opts = doc.querySelectorAll('[role="listbox"] [role="option"]');
-                                    if (!opts || opts.length === 0) return;
-                                    clearInterval(finder);
-                                    // 完全一致を探す
-                                    for (var i = 0; i < opts.length; i++) {
-                                        if (opts[i].textContent.trim() === colName) {
-                                            opts[i].click();
-                                            return;
-                                        }
-                                    }
-                                    // 部分一致を探す
-                                    for (var j = 0; j < opts.length; j++) {
-                                        var optText = opts[j].textContent.trim();
-                                        if (optText.includes(colName) || colName.includes(optText)) {
-                                            opts[j].click();
-                                            return;
-                                        }
-                                    }
-                                }, 100);
-                            }, 100);
-                        }
-
+                        // 4. 列名をsessionStorageに保存してボタンクリック
                         const delBtn = makeItem('🗑 項目を削除', '#ff6b6b', function() {
-                            openDeleteAndSelect(getColumnName());
+                            var colName = getColumnName();
+                            if (colName) {
+                                try { window.parent.sessionStorage.setItem('__pendingDeleteCol', colName); } catch(e) {}
+                            }
+                            clickButtonInActiveTab('項目を削除');
                         });
                         hideItem.parentElement.insertBefore(delBtn, hideItem.nextSibling);
 
