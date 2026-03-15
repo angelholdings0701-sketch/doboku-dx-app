@@ -391,15 +391,18 @@ def dialog_del_column(target):
         st.warning("データがありません。")
         return
     cols = src_df.columns.tolist()
-    sel_col = st.selectbox("削除する項目を選択", cols)
-    st.warning("⚠️ この操作は「保存」ボタンを押すとスプレッドシートからも完全に削除されます。元に戻せません。")
-    if st.button("🗑 削除する", type="primary", use_container_width=True):
-        key = f"del_cols_{target}"
-        if key not in st.session_state:
-            st.session_state[key] = []
-        if sel_col not in st.session_state[key]:
-            st.session_state[key].append(sel_col)
-        st.rerun()
+    sel_col = st.selectbox("削除する項目を選択", cols, index=None, placeholder="削除する項目を選んでください")
+    if sel_col:
+        st.warning(f"⚠️ 「**{sel_col}**」を削除します。「保存」ボタンを押すとスプレッドシートからも完全に削除されます。元に戻せません。")
+        if st.button(f"🗑 「{sel_col}」を削除する", type="primary", use_container_width=True):
+            key = f"del_cols_{target}"
+            if key not in st.session_state:
+                st.session_state[key] = []
+            if sel_col not in st.session_state[key]:
+                st.session_state[key].append(sel_col)
+            st.rerun()
+    else:
+        st.info("削除する項目を選択してください。")
 
 # =========================
 # タブ画面構成
