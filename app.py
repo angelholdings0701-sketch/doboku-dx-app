@@ -129,9 +129,9 @@ components.html("""
                             var checker = setInterval(function() {
                                 attempts++;
                                 if (attempts > 50) { clearInterval(checker); return; }
-                                var modal = doc.querySelector('[data-testid="stModal"]');
-                                if (!modal) return;
-                                var sbInput = modal.querySelector('[data-baseweb="select"] input');
+                                var dialog = doc.querySelector('[role="dialog"]');
+                                if (!dialog) return;
+                                var sbInput = dialog.querySelector('input[role="combobox"]');
                                 if (!sbInput) return;
                                 clearInterval(checker);
                                 // セレクトボックスをクリックして開く
