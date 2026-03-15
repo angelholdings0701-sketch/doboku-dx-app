@@ -106,8 +106,54 @@ components.html("""
                             return item;
                         }
 
+                        // 3. メニューから列名を取得するヘルパー
+                        function getColumnName() {
+                            const skip = ['列幅を自動調整','列を固定','列を非表示','書式',
+                                          '🗑 項目を削除','➕ 項目を追加'];
+                            const spans = node.querySelectorAll('span');
+                            for (const s of spans) {
+                                const t = s.textContent.trim();
+                                if (t && t.length > 0 && t.length < 30 && !skip.includes(t) && s.children.length === 0) {
+                                    return t;
+                                }
+                            }
+                            return '';
+                        }
+
+                        // 4. hidden inputに列名をセットしてからボタンクリック
+                        function getActiveTarget() {
+                            const tabs = doc.querySelectorAll('[role="tab"][aria-selected="true"]');
+                            for (const tab of tabs) {
+                                const t = tab.textContent || '';
+                                if (t.includes('工事')) return 'kouji';
+                                if (t.includes('技術者')) return 'eng';
+                            }
+                            return 'kouji';
+                        }
+
+                        function setHiddenInputAndClick(colName) {
+                            const target = getActiveTarget();
+                            const ph = '__del_target_' + target + '__';
+                            const input = doc.querySelector('input[placeholder="' + ph + '"]');
+                            if (input) {
+                                const setter = Object.getOwnPropertyDescriptor(
+                                    window.parent.HTMLInputElement.prototype, 'value'
+                                ).set;
+                                setter.call(input, colName);
+                                input.dispatchEvent(new Event('input', { bubbles: true }));
+                            }
+                            setTimeout(function() {
+                                clickButtonInActiveTab('項目を削除');
+                            }, 200);
+                        }
+
                         const delBtn = makeItem('🗑 項目を削除', '#ff6b6b', function() {
-                            clickButtonInActiveTab('項目を削除');
+                            const col = getColumnName();
+                            if (col) {
+                                setHiddenInputAndClick(col);
+                            } else {
+                                clickButtonInActiveTab('項目を削除');
+                            }
                         });
                         hideItem.parentElement.insertBefore(delBtn, hideItem.nextSibling);
 
@@ -387,11 +433,23 @@ def dialog_add_column(target):
 @st.dialog("🗑 項目（列）を削除")
 def dialog_del_column(target):
     src_df = df_kouji_raw if target == "kouji" else df_eng_raw
-    if src_df.empty:
+    # extra_colsも含める
+    extra_key = f"extra_cols_{target}"
+    extra_cols = st.session_state.get(extra_key, [])
+    all_cols = src_df.columns.tolist()
+    for c in extra_cols:
+        if c not in all_cols:
+            all_cols.append(c)
+    if not all_cols:
         st.warning("データがありません。")
         return
-    cols = src_df.columns.tolist()
-    sel_col = st.selectbox("削除する項目を選択", cols, index=None, placeholder="削除する項目を選んでください")
+    # メニューからの列名を取得してpre-select
+    preselect = st.session_state.get(f"_del_target_{target}", "")
+    if preselect and preselect in all_cols:
+        idx = all_cols.index(preselect)
+    else:
+        idx = None
+    sel_col = st.selectbox("削除する項目を選択", all_cols, index=idx, placeholder="削除する項目を選んでください")
     if sel_col:
         st.warning(f"⚠️ 「**{sel_col}**」を削除します。「保存」ボタンを押すとスプレッドシートからも完全に削除されます。元に戻せません。")
         if st.button(f"🗑 「{sel_col}」を削除する", type="primary", use_container_width=True):
@@ -400,6 +458,11 @@ def dialog_del_column(target):
                 st.session_state[key] = []
             if sel_col not in st.session_state[key]:
                 st.session_state[key].append(sel_col)
+            # extra_colsからも除去
+            if sel_col in st.session_state.get(extra_key, []):
+                st.session_state[extra_key].remove(sel_col)
+            # pre-selectをクリア
+            st.session_state[f"_del_target_{target}"] = ""
             st.rerun()
     else:
         st.info("削除する項目を選択してください。")
@@ -855,6 +918,20 @@ with tab2:
     if "extra_cols_kouji" not in st.session_state:
         st.session_state.extra_cols_kouji = []
 
+    # 追加列・削除列をボタンの前に反映（ダイアログが正しいリストを表示するため）
+    for col in st.session_state.extra_cols_kouji:
+        if col not in df_kouji_raw.columns:
+            df_kouji_raw[col] = None
+    if "del_cols_kouji" in st.session_state and st.session_state.del_cols_kouji:
+        st.warning(f"⚠️ 削除予定の項目: {', '.join(st.session_state.del_cols_kouji)}（保存で確定・取り消すにはページを再読み込み）")
+        for col in st.session_state.del_cols_kouji:
+            if col in df_kouji_raw.columns:
+                df_kouji_raw = df_kouji_raw.drop(columns=[col])
+
+    # Hidden input（メニューから列名を受け取る）
+    st.markdown('<style>div:has(> div > input[placeholder^="__del_target"]) { position:absolute; opacity:0; height:0; overflow:hidden; pointer-events:none; }</style>', unsafe_allow_html=True)
+    st.text_input("_", key="_del_target_kouji", placeholder="__del_target_kouji__", label_visibility="collapsed")
+
     btn_k1, btn_k2, btn_k3 = st.columns([1, 1, 3])
     with btn_k1:
         if st.button("➕ 項目を追加", key="btn_add_col_kouji"):
@@ -862,18 +939,6 @@ with tab2:
     with btn_k2:
         if st.button("🗑 項目を削除", key="btn_del_col_kouji"):
             dialog_del_column("kouji")
-
-    # session_stateに保持された追加列をDataFrameに反映
-    for col in st.session_state.extra_cols_kouji:
-        if col not in df_kouji_raw.columns:
-            df_kouji_raw[col] = None
-
-    # session_stateに保持された削除列をDataFrameから除外
-    if "del_cols_kouji" in st.session_state and st.session_state.del_cols_kouji:
-        st.warning(f"⚠️ 削除予定の項目: {', '.join(st.session_state.del_cols_kouji)}（保存で確定・取り消すにはページを再読み込み）")
-        for col in st.session_state.del_cols_kouji:
-            if col in df_kouji_raw.columns:
-                df_kouji_raw = df_kouji_raw.drop(columns=[col])
 
     k_col_cfg = {}
     if not df_kouji_raw.empty:
@@ -912,6 +977,19 @@ with tab3:
     if "extra_cols_eng" not in st.session_state:
         st.session_state.extra_cols_eng = []
 
+    # 追加列・削除列をボタンの前に反映
+    for col in st.session_state.extra_cols_eng:
+        if col not in df_eng_raw.columns:
+            df_eng_raw[col] = None
+    if "del_cols_eng" in st.session_state and st.session_state.del_cols_eng:
+        st.warning(f"⚠️ 削除予定の項目: {', '.join(st.session_state.del_cols_eng)}（保存で確定・取り消すにはページを再読み込み）")
+        for col in st.session_state.del_cols_eng:
+            if col in df_eng_raw.columns:
+                df_eng_raw = df_eng_raw.drop(columns=[col])
+
+    # Hidden input（メニューから列名を受け取る）
+    st.text_input("_", key="_del_target_eng", placeholder="__del_target_eng__", label_visibility="collapsed")
+
     btn_e1, btn_e2, btn_e3 = st.columns([1, 1, 3])
     with btn_e1:
         if st.button("➕ 項目を追加", key="btn_add_col_eng"):
@@ -919,18 +997,6 @@ with tab3:
     with btn_e2:
         if st.button("🗑 項目を削除", key="btn_del_col_eng"):
             dialog_del_column("eng")
-
-    # session_stateに保持された追加列をDataFrameに反映
-    for col in st.session_state.extra_cols_eng:
-        if col not in df_eng_raw.columns:
-            df_eng_raw[col] = None
-
-    # session_stateに保持された削除列をDataFrameから除外
-    if "del_cols_eng" in st.session_state and st.session_state.del_cols_eng:
-        st.warning(f"⚠️ 削除予定の項目: {', '.join(st.session_state.del_cols_eng)}（保存で確定・取り消すにはページを再読み込み）")
-        for col in st.session_state.del_cols_eng:
-            if col in df_eng_raw.columns:
-                df_eng_raw = df_eng_raw.drop(columns=[col])
 
     e_col_cfg = {
         "在籍状況": st.column_config.CheckboxColumn("在籍", default=True),
