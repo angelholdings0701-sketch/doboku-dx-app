@@ -15,24 +15,20 @@ components.html("""
 (function() {
     const doc = window.parent.document;
 
-    // --- 削除ダイアログ自動選択（親windowグローバル変数から列名を読み取り） ---
-    (function autoSelectDeleteCol() {
+    // --- 削除ダイアログ自動選択（MutationObserverでダイアログ出現を常時監視） ---
+    var dialogObs = new MutationObserver(function() {
         var colName = window.parent.__pendingDeleteCol;
         if (!colName) return;
+        var dialog = doc.querySelector('[role="dialog"]');
+        if (!dialog) return;
+        var sbInput = dialog.querySelector('input[role="combobox"]');
+        if (!sbInput) return;
+        // ダイアログが見つかったので列名をクリア
         delete window.parent.__pendingDeleteCol;
-        var attempts = 0;
-        var checker = setInterval(function() {
-            attempts++;
-            if (attempts > 80) { clearInterval(checker); return; }
-            var dialog = doc.querySelector('[role="dialog"]');
-            if (!dialog) return;
-            var sbInput = dialog.querySelector('input[role="combobox"]');
-            if (!sbInput) return;
-            clearInterval(checker);
-            // セレクトボックスを開く
+        // セレクトボックスを開いて選択
+        setTimeout(function() {
             sbInput.focus();
             sbInput.click();
-            // オプションが表示されるのを待つ
             var findAttempts = 0;
             var finder = setInterval(function() {
                 findAttempts++;
@@ -56,8 +52,9 @@ components.html("""
                     }
                 }
             }, 100);
-        }, 100);
-    })();
+        }, 200);
+    });
+    dialogObs.observe(doc.body || doc.documentElement, { childList: true, subtree: true });
 
     // --- 2回Enterで確定 ---
     let lastEnterTime = 0;
