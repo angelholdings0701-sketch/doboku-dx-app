@@ -15,47 +15,6 @@ components.html("""
 (function() {
     const doc = window.parent.document;
 
-    // --- 削除ダイアログ自動選択（MutationObserverでダイアログ出現を常時監視） ---
-    var dialogObs = new MutationObserver(function() {
-        var colName = window.parent.__pendingDeleteCol;
-        if (!colName) return;
-        var dialog = doc.querySelector('[role="dialog"]');
-        if (!dialog) return;
-        var sbInput = dialog.querySelector('input[role="combobox"]');
-        if (!sbInput) return;
-        // ダイアログが見つかったので列名をクリア
-        delete window.parent.__pendingDeleteCol;
-        // セレクトボックスを開いて選択
-        setTimeout(function() {
-            sbInput.focus();
-            sbInput.click();
-            var findAttempts = 0;
-            var finder = setInterval(function() {
-                findAttempts++;
-                if (findAttempts > 40) { clearInterval(finder); return; }
-                var opts = doc.querySelectorAll('[role="option"]');
-                if (!opts || opts.length === 0) return;
-                clearInterval(finder);
-                // 完全一致を探す
-                for (var i = 0; i < opts.length; i++) {
-                    if (opts[i].textContent.trim() === colName) {
-                        opts[i].click();
-                        return;
-                    }
-                }
-                // 部分一致
-                for (var j = 0; j < opts.length; j++) {
-                    var t = opts[j].textContent.trim();
-                    if (t.includes(colName) || colName.includes(t)) {
-                        opts[j].click();
-                        return;
-                    }
-                }
-            }, 100);
-        }, 200);
-    });
-    dialogObs.observe(doc.body || doc.documentElement, { childList: true, subtree: true });
-
     // --- 2回Enterで確定 ---
     let lastEnterTime = 0;
     doc.addEventListener('keydown', function(e) {
@@ -158,7 +117,7 @@ components.html("""
                                 // メニュー項目テキストも除外
                                 if (!t || t.length === 0 || t.length > 50) continue;
                                 const skip = ['列幅を自動調整','列を固定','列を非表示','書式',
-                                              '🗑 項目を削除','➕ 項目を追加',
+                                              '✏️ 項目名を変更',
                                               'Autosize','Pin column','Hide column','Format'];
                                 if (skip.includes(t)) continue;
                                 return t;
@@ -166,20 +125,15 @@ components.html("""
                             return '';
                         }
 
-                        // 4. 列名を親windowグローバル変数に保存してボタンクリック
-                        const delBtn = makeItem('🗑 項目を削除', '#ff6b6b', function() {
+                        // 4. 項目名を変更ボタン（Streamlitダイアログを開く）
+                        const renameBtn = makeItem('✏️ 項目名を変更', '#74c0fc', function() {
                             var colName = getColumnName();
                             if (colName) {
-                                window.parent.__pendingDeleteCol = colName;
+                                window.parent.__pendingRenameCol = colName;
                             }
-                            clickButtonInActiveTab('項目を削除');
+                            clickButtonInActiveTab('項目名を変更する');
                         });
-                        hideItem.parentElement.insertBefore(delBtn, hideItem.nextSibling);
-
-                        const addBtn = makeItem('➕ 項目を追加', '#51cf66', function() {
-                            clickButtonInActiveTab('項目を追加');
-                        });
-                        hideItem.parentElement.insertBefore(addBtn, delBtn.nextSibling);
+                        hideItem.parentElement.insertBefore(renameBtn, hideItem.nextSibling);
                     });
                 }
             }
@@ -477,6 +431,46 @@ def dialog_del_column(target):
             st.rerun()
     else:
         st.info("削除する項目を選択してください。")
+
+# =========================
+# 項目名変更のモーダルダイアログ
+# =========================
+@st.dialog("✏️ 項目名を変更")
+def dialog_rename_column(target):
+    src_df = df_kouji_raw if target == "kouji" else df_eng_raw
+    all_cols = src_df.columns.tolist()
+    extra_key = f"extra_cols_{target}"
+    for c in st.session_state.get(extra_key, []):
+        if c not in all_cols:
+            all_cols.append(c)
+    if not all_cols:
+        st.warning("データがありません。")
+        return
+    # JS側から列名が渡されていればデフォルト選択
+    pre_selected = st.session_state.get("_rename_col_name", None)
+    default_idx = None
+    if pre_selected and pre_selected in all_cols:
+        default_idx = all_cols.index(pre_selected)
+    sel_col = st.selectbox("変更する項目を選択", all_cols, index=default_idx, placeholder="項目を選んでください")
+    if sel_col:
+        new_name = st.text_input("新しい項目名", value="", placeholder=f"例: {sel_col}_新")
+        if st.button(f"✏️ 「{sel_col}」→「{new_name}」に変更", type="primary", use_container_width=True, disabled=not new_name.strip()):
+            new_name = new_name.strip()
+            if new_name == sel_col:
+                st.warning("同じ名前です。")
+                return
+            if new_name in all_cols:
+                st.warning(f"「{new_name}」は既に存在します。")
+                return
+            rename_key = f"rename_cols_{target}"
+            if rename_key not in st.session_state:
+                st.session_state[rename_key] = {}
+            st.session_state[rename_key][sel_col] = new_name
+            if "_rename_col_name" in st.session_state:
+                del st.session_state["_rename_col_name"]
+            st.rerun()
+    else:
+        st.info("変更する項目を選択してください。")
 
 # =========================
 # タブ画面構成
@@ -929,6 +923,12 @@ with tab2:
     if "extra_cols_kouji" not in st.session_state:
         st.session_state.extra_cols_kouji = []
 
+    # リネーム処理を反映
+    if "rename_cols_kouji" in st.session_state and st.session_state.rename_cols_kouji:
+        for old_name, new_name in st.session_state.rename_cols_kouji.items():
+            if old_name in df_kouji_raw.columns:
+                df_kouji_raw = df_kouji_raw.rename(columns={old_name: new_name})
+
     # 追加列・削除列をボタンの前に反映（ダイアログが正しいリストを表示するため）
     for col in st.session_state.extra_cols_kouji:
         if col not in df_kouji_raw.columns:
@@ -939,6 +939,11 @@ with tab2:
             if col in df_kouji_raw.columns:
                 df_kouji_raw = df_kouji_raw.drop(columns=[col])
 
+    if "rename_cols_kouji" in st.session_state and st.session_state.rename_cols_kouji:
+        renamed = st.session_state.rename_cols_kouji
+        msgs = [f"「{k}」→「{v}」" for k, v in renamed.items()]
+        st.info(f"✏️ 項目名変更予定: {', '.join(msgs)}（保存で確定・取り消すにはページを再読み込み）")
+
     btn_k1, btn_k2, btn_k3 = st.columns([1, 1, 3])
     with btn_k1:
         if st.button("➕ 項目を追加", key="btn_add_col_kouji"):
@@ -946,6 +951,10 @@ with tab2:
     with btn_k2:
         if st.button("🗑 項目を削除", key="btn_del_col_kouji"):
             dialog_del_column("kouji")
+
+    # JS連携用の非表示リネームボタン
+    if st.button("項目名を変更する", key="btn_rename_col_kouji", type="secondary"):
+        dialog_rename_column("kouji")
 
     k_col_cfg = {}
     if not df_kouji_raw.empty:
@@ -972,6 +981,7 @@ with tab2:
                 st.success(f"シート「{KOUJI_SHEET}」に上書き保存しました！")
                 st.session_state.extra_cols_kouji = []
                 st.session_state.del_cols_kouji = []
+                st.session_state.rename_cols_kouji = {}
                 st.cache_data.clear()
                 st.rerun()
 
@@ -984,6 +994,12 @@ with tab3:
     if "extra_cols_eng" not in st.session_state:
         st.session_state.extra_cols_eng = []
 
+    # リネーム処理を反映
+    if "rename_cols_eng" in st.session_state and st.session_state.rename_cols_eng:
+        for old_name, new_name in st.session_state.rename_cols_eng.items():
+            if old_name in df_eng_raw.columns:
+                df_eng_raw = df_eng_raw.rename(columns={old_name: new_name})
+
     # 追加列・削除列をボタンの前に反映
     for col in st.session_state.extra_cols_eng:
         if col not in df_eng_raw.columns:
@@ -994,6 +1010,11 @@ with tab3:
             if col in df_eng_raw.columns:
                 df_eng_raw = df_eng_raw.drop(columns=[col])
 
+    if "rename_cols_eng" in st.session_state and st.session_state.rename_cols_eng:
+        renamed = st.session_state.rename_cols_eng
+        msgs = [f"「{k}」→「{v}」" for k, v in renamed.items()]
+        st.info(f"✏️ 項目名変更予定: {', '.join(msgs)}（保存で確定・取り消すにはページを再読み込み）")
+
     btn_e1, btn_e2, btn_e3 = st.columns([1, 1, 3])
     with btn_e1:
         if st.button("➕ 項目を追加", key="btn_add_col_eng"):
@@ -1001,6 +1022,10 @@ with tab3:
     with btn_e2:
         if st.button("🗑 項目を削除", key="btn_del_col_eng"):
             dialog_del_column("eng")
+
+    # JS連携用の非表示リネームボタン
+    if st.button("項目名を変更する", key="btn_rename_col_eng", type="secondary"):
+        dialog_rename_column("eng")
 
     e_col_cfg = {
         "在籍状況": st.column_config.CheckboxColumn("在籍", default=True),
@@ -1034,5 +1059,6 @@ with tab3:
                 st.success(f"シート「{ENGINEER_SHEET}」に上書き保存しました！")
                 st.session_state.extra_cols_eng = []
                 st.session_state.del_cols_eng = []
+                st.session_state.rename_cols_eng = {}
                 st.cache_data.clear()
                 st.rerun()
