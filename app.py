@@ -319,9 +319,6 @@ def load_data():
 
     if df_k.empty:
         df_k = pd.DataFrame(columns=core_k_cols)
-    for c in core_k_cols:
-        if c not in df_k.columns:
-            df_k[c] = ""
     for col in df_k.columns:
         if "日" in col:
             df_k[col] = pd.to_datetime(df_k[col], errors="coerce")
@@ -340,12 +337,6 @@ def load_data():
 
     if df_e.empty:
         df_e = pd.DataFrame(columns=core_e_cols)
-    for col in core_e_cols:
-        if col not in df_e.columns:
-            if col == '在籍状況':
-                df_e[col] = True
-            else:
-                df_e[col] = ""
     for col in df_e.columns:
         if "日" in col:
             df_e[col] = pd.to_datetime(df_e[col], errors="coerce")
