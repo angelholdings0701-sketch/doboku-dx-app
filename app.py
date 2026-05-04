@@ -8,7 +8,6 @@ from streamlit_gsheets import GSheetsConnection
 
 # === ページ設定 ===
 st.set_page_config(page_title="工事実績管理DB", layout="wide")
-
 # === data_editor カスタマイズ（Enterキー + メニュー日本語化 + 項目追加/削除連携） ===
 components.html("""
 <script>
@@ -377,8 +376,6 @@ df_kouji_raw, df_eng_raw = load_data()
 # 項目追加・削除のモーダルダイアログ
 # =========================
 
-# デバッグ: 読み込み行数の確認
-st.sidebar.info(f"📊 工事データ: {len(df_kouji_raw)}行 / 技術者: {len(df_eng_raw)}名")
 @st.dialog("➕ 項目（列）を追加")
 def dialog_add_column(target):
     new_col = st.text_input("追加する項目名を入力してください", placeholder="例: 備考、電話番号")
@@ -781,7 +778,10 @@ with tab1:
             df_res = df_res[df_res['工種名'].isin(sel_types)]
 
         if '竣工年_val' in df_res.columns:
-            df_res = df_res[(df_res['竣工年_val'] >= start_year) & (df_res['竣工年_val'] <= end_year)]
+            df_res = df_res[
+                (df_res['竣工年_val'] == 0) |  # 竣工日未設定の行も含める
+                ((df_res['竣工年_val'] >= start_year) & (df_res['竣工年_val'] <= end_year))
+            ]
 
         # 数量キーワードによるフィルタリング
         overview_col = '工事概要（主な工種、規格、数量）'
