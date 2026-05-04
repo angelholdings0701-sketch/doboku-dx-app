@@ -898,8 +898,8 @@ with tab1:
 
                 p_df = pd.DataFrame(data['projects'])
                 if not p_df.empty:
-                    if 'search_price' in p_df.columns:
-                        p_df = p_df.sort_values('search_price', ascending=False)
+                    if '竣工年（和暦）' in p_df.columns:
+                        p_df = p_df.sort_values('竣工年（和暦）', ascending=False, na_position='last')
 
                     all_cols = p_df.columns.tolist()
                     orig_csv_cols = [c for c in df_kouji_raw.columns if c not in system_cols]
@@ -940,10 +940,9 @@ with tab1:
 
                 display_df_kouji = df_res[display_cols].copy()
 
-                # 金額で降順ソート
-                if 'search_price' in df_res.columns:
-                    sort_idx = df_res['search_price'].sort_values(ascending=False).index
-                    display_df_kouji = display_df_kouji.loc[sort_idx]
+                # 竣工年（和暦）で降順ソート
+                if '竣工年（和暦）' in display_df_kouji.columns:
+                    display_df_kouji = display_df_kouji.sort_values('竣工年（和暦）', ascending=False, na_position='last')
 
                 # 日付カラムのフォーマット
                 for col in display_df_kouji.columns:
