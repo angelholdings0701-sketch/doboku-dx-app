@@ -838,75 +838,115 @@ with tab1:
                 k_norm = normalize_text(k)
                 df_res = df_res[df_res['full_text_search'].str.contains(k_norm, na=False)]
 
-        # --- 集計処理 ---
-        results = {}
-        search_roles_final = sel_roles if sel_roles else avail_roles
-        system_cols = ['search_price', 'full_text_search', '竣工日_dt', '竣工年_val']
+        # --- サブタブ: 技術者ベース / 工事データ ---
+        sub_tab1, sub_tab2 = st.tabs(["👤 技術者ベース", "📋 工事データ"])
 
-        for idx, row in df_res.iterrows():
-            for role in search_roles_final:
-                raw_val = row.get(role)
-                if pd.isnull(raw_val) or str(raw_val).strip() == "":
-                    continue
-                cell_clean = clean_string_for_match(raw_val)
+        # ===== サブタブ1: 技術者ベース =====
+        with sub_tab1:
+            # --- 集計処理 ---
+            results = {}
+            search_roles_final = sel_roles if sel_roles else avail_roles
+            system_cols = ['search_price', 'full_text_search', '竣工日_dt', '竣工年_val']
 
-                for eng_clean, eng_display in search_target_list:
-                    if eng_clean in cell_clean:
-                        is_display_target = True
-                        if search_keywords:
-                            for k in search_keywords:
-                                if normalize_text(k) not in row['full_text_search']:
-                                    is_display_target = False
-                                    break
-                        if is_display_target:
-                            if eng_display not in results:
-                                p_qual = engineer_map.get(eng_clean, "")
-                                results[eng_display] = {"qualification": p_qual, "projects": []}
-                            item = row.to_dict()
-                            item['役割'] = role
-                            results[eng_display]["projects"].append(item)
+            for idx, row in df_res.iterrows():
+                for role in search_roles_final:
+                    raw_val = row.get(role)
+                    if pd.isnull(raw_val) or str(raw_val).strip() == "":
+                        continue
+                    cell_clean = clean_string_for_match(raw_val)
 
-        # 数量条件の表示
-        if qty_conditions:
-            cond_texts = []
-            for kw, min_val in qty_conditions:
-                unit, _ = QUANTITY_KEYWORDS.get(kw, ("", 1))
-                cond_texts.append(f"**{kw}** {min_val:,.0f}{unit}以上")
-            st.info("📋 数量条件: " + " ／ ".join(cond_texts))
+                    for eng_clean, eng_display in search_target_list:
+                        if eng_clean in cell_clean:
+                            is_display_target = True
+                            if search_keywords:
+                                for k in search_keywords:
+                                    if normalize_text(k) not in row['full_text_search']:
+                                        is_display_target = False
+                                        break
+                            if is_display_target:
+                                if eng_display not in results:
+                                    p_qual = engineer_map.get(eng_clean, "")
+                                    results[eng_display] = {"qualification": p_qual, "projects": []}
+                                item = row.to_dict()
+                                item['役割'] = role
+                                results[eng_display]["projects"].append(item)
 
-        st.subheader(f"検索結果: {len(results)} 名")
-        st.write("---")
+            # 数量条件の表示
+            if qty_conditions:
+                cond_texts = []
+                for kw, min_val in qty_conditions:
+                    unit, _ = QUANTITY_KEYWORDS.get(kw, ("", 1))
+                    cond_texts.append(f"**{kw}** {min_val:,.0f}{unit}以上")
+                st.info("📋 数量条件: " + " ／ ".join(cond_texts))
 
-        for name in sorted(results.keys()):
-            data = results[name]
-            qual_display = data['qualification']
-            if qual_display and qual_display.lower() != 'nan':
-                st.markdown(f"### 👤 {name} 【{qual_display}】")
-            else:
-                st.markdown(f"### 👤 {name}")
+            st.subheader(f"検索結果: {len(results)} 名")
+            st.write("---")
 
-            p_df = pd.DataFrame(data['projects'])
-            if not p_df.empty:
-                if 'search_price' in p_df.columns:
-                    p_df = p_df.sort_values('search_price', ascending=False)
+            for name in sorted(results.keys()):
+                data = results[name]
+                qual_display = data['qualification']
+                if qual_display and qual_display.lower() != 'nan':
+                    st.markdown(f"### 👤 {name} 【{qual_display}】")
+                else:
+                    st.markdown(f"### 👤 {name}")
 
-                all_cols = p_df.columns.tolist()
+                p_df = pd.DataFrame(data['projects'])
+                if not p_df.empty:
+                    if 'search_price' in p_df.columns:
+                        p_df = p_df.sort_values('search_price', ascending=False)
+
+                    all_cols = p_df.columns.tolist()
+                    orig_csv_cols = [c for c in df_kouji_raw.columns if c not in system_cols]
+                    final_order = ['役割']
+                    for c in orig_csv_cols:
+                        if c in p_df.columns:
+                            final_order.append(c)
+                    for c in all_cols:
+                        if c not in final_order and c not in system_cols:
+                            final_order.append(c)
+
+                    display_df = p_df[final_order].copy()
+                    for col in display_df.columns:
+                        if '日' in col:
+                            display_df[col] = pd.to_datetime(display_df[col], errors='coerce').dt.strftime('%Y/%m/%d').fillna('')
+
+                    st.dataframe(display_df, use_container_width=True, hide_index=True)
+                    st.markdown("---")
+
+        # ===== サブタブ2: 工事データ =====
+        with sub_tab2:
+            system_cols = ['search_price', 'full_text_search', '竣工日_dt', '竣工年_val']
+
+            # 数量条件の表示
+            if qty_conditions:
+                cond_texts = []
+                for kw, min_val in qty_conditions:
+                    unit, _ = QUANTITY_KEYWORDS.get(kw, ("", 1))
+                    cond_texts.append(f"**{kw}** {min_val:,.0f}{unit}以上")
+                st.info("📋 数量条件: " + " ／ ".join(cond_texts))
+
+            st.subheader(f"検索結果: {len(df_res)} 件の工事データ")
+
+            if not df_res.empty:
+                # 表示用カラムの整理（システムカラムを除外）
                 orig_csv_cols = [c for c in df_kouji_raw.columns if c not in system_cols]
-                final_order = ['役割']
-                for c in orig_csv_cols:
-                    if c in p_df.columns:
-                        final_order.append(c)
-                for c in all_cols:
-                    if c not in final_order and c not in system_cols:
-                        final_order.append(c)
+                display_cols = [c for c in orig_csv_cols if c in df_res.columns]
 
-                display_df = p_df[final_order].copy()
-                for col in display_df.columns:
+                display_df_kouji = df_res[display_cols].copy()
+
+                # 金額で降順ソート
+                if 'search_price' in df_res.columns:
+                    sort_idx = df_res['search_price'].sort_values(ascending=False).index
+                    display_df_kouji = display_df_kouji.loc[sort_idx]
+
+                # 日付カラムのフォーマット
+                for col in display_df_kouji.columns:
                     if '日' in col:
-                        display_df[col] = pd.to_datetime(display_df[col], errors='coerce').dt.strftime('%Y/%m/%d').fillna('')
+                        display_df_kouji[col] = pd.to_datetime(display_df_kouji[col], errors='coerce').dt.strftime('%Y/%m/%d').fillna('')
 
-                st.dataframe(display_df, use_container_width=True, hide_index=True)
-                st.markdown("---")
+                st.dataframe(display_df_kouji, use_container_width=True, hide_index=True)
+            else:
+                st.info("条件に一致する工事データはありません。")
 
 # --- タブ2: 工事登録 ---
 with tab2:
