@@ -376,6 +376,9 @@ df_kouji_raw, df_eng_raw = load_data()
 # =========================
 # 項目追加・削除のモーダルダイアログ
 # =========================
+
+# デバッグ: 読み込み行数の確認
+st.sidebar.info(f"📊 工事データ: {len(df_kouji_raw)}行 / 技術者: {len(df_eng_raw)}名")
 @st.dialog("➕ 項目（列）を追加")
 def dialog_add_column(target):
     new_col = st.text_input("追加する項目名を入力してください", placeholder="例: 備考、電話番号")
