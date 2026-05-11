@@ -372,10 +372,14 @@ def save_engineer(df):
 # データ読み込み
 df_kouji_raw, df_eng_raw = load_data()
 
-# CCUS技能者IDを文字列に変換（float→intの小数点除去）
+# CCUS技能者ID / CCUS管理者IDを文字列に変換（float→intの小数点除去）
 if 'CCUS技能者ID' in df_eng_raw.columns:
     df_eng_raw['CCUS技能者ID'] = df_eng_raw['CCUS技能者ID'].apply(
-        lambda x: str(int(x)) if pd.notnull(x) and str(x).strip() != '' else ''
+        lambda x: str(int(float(x))) if pd.notnull(x) and str(x).strip() not in ('', 'nan') else ''
+    )
+if 'CCUS管理者ID' in df_eng_raw.columns:
+    df_eng_raw['CCUS管理者ID'] = df_eng_raw['CCUS管理者ID'].apply(
+        lambda x: str(int(float(x))) if pd.notnull(x) and str(x).strip() not in ('', 'nan') else ''
     )
 
 # =========================
@@ -1071,6 +1075,7 @@ with tab3:
         "技術者ID": st.column_config.TextColumn("技術者ID", width="medium", required=True),
         "保有資格": st.column_config.TextColumn("保有資格", width="large"),
         "CCUS技能者ID": st.column_config.TextColumn("CCUS技能者ID"),
+        "CCUS管理者ID": st.column_config.TextColumn("CCUS管理者ID"),
     }
     if not df_eng_raw.empty:
         for c in df_eng_raw.columns:
