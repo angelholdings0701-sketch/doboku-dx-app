@@ -243,9 +243,14 @@ def to_editable_text(value):
 
 def should_force_text_column(column_name):
     """工事編集タブで型混在しやすい列を文字列編集列として扱う。"""
-    normalized_name = str(column_name).strip()
-    exact_text_cols = {"工事コード", "JV比率", "有資格２", "有資格2"}
-    return normalized_name in exact_text_cols or "金額" in normalized_name
+    normalized_name = unicodedata.normalize("NFKC", str(column_name))
+    normalized_name = re.sub(r"[\s\u3000]+", "", normalized_name)
+    exact_text_cols = {"JV比率", "有資格2"}
+    return (
+        normalized_name in exact_text_cols
+        or "工事コード" in normalized_name
+        or "金額" in normalized_name
+    )
 
 # ==========================================
 # 数量キーワード検索用の定義と関数
@@ -1034,7 +1039,7 @@ with tab2:
             edited_kouji = st.data_editor(
                 df_kouji_raw, num_rows="dynamic",
                 use_container_width=True, column_config=k_col_cfg,
-                key="editor_kouji"
+                key="editor_kouji_text_columns_v2"
             )
         else:
             st.warning("工事データが空です。新規登録してください。")
