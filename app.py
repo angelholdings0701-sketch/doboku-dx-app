@@ -227,6 +227,20 @@ def process_price_data(x):
         return 0
     return max(valid_nums)
 
+def to_editable_text(value):
+    """data_editorで型混在列が編集不可になるのを避けるため、表示編集用の文字列に整える。"""
+    if pd.isna(value):
+        return ""
+    if isinstance(value, str):
+        return value
+    if hasattr(value, "is_integer"):
+        try:
+            if value.is_integer():
+                return str(int(value))
+        except TypeError:
+            pass
+    return str(value)
+
 # ==========================================
 # 数量キーワード検索用の定義と関数
 # ==========================================
@@ -1004,6 +1018,11 @@ with tab2:
         for c in df_kouji_raw.columns:
             if "日" in c:
                 k_col_cfg[c] = st.column_config.DateColumn(c, format="YYYY/MM/DD")
+        force_text_cols = ["工事コード", "金額（税抜き）", "JV比率", "有資格２"]
+        for c in force_text_cols:
+            if c in df_kouji_raw.columns:
+                df_kouji_raw[c] = df_kouji_raw[c].apply(to_editable_text).astype("string")
+                k_col_cfg[c] = st.column_config.TextColumn(c, width="medium")
 
     with st.form("kouji_form"):
         if not df_kouji_raw.empty:
