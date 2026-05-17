@@ -241,6 +241,12 @@ def to_editable_text(value):
             pass
     return str(value)
 
+def should_force_text_column(column_name):
+    """工事編集タブで型混在しやすい列を文字列編集列として扱う。"""
+    normalized_name = str(column_name).strip()
+    exact_text_cols = {"工事コード", "JV比率", "有資格２", "有資格2"}
+    return normalized_name in exact_text_cols or "金額" in normalized_name
+
 # ==========================================
 # 数量キーワード検索用の定義と関数
 # ==========================================
@@ -1018,9 +1024,8 @@ with tab2:
         for c in df_kouji_raw.columns:
             if "日" in c:
                 k_col_cfg[c] = st.column_config.DateColumn(c, format="YYYY/MM/DD")
-        force_text_cols = ["工事コード", "金額（税抜き）", "JV比率", "有資格２"]
-        for c in force_text_cols:
-            if c in df_kouji_raw.columns:
+        for c in df_kouji_raw.columns:
+            if should_force_text_column(c):
                 df_kouji_raw[c] = df_kouji_raw[c].apply(to_editable_text).astype("string")
                 k_col_cfg[c] = st.column_config.TextColumn(c, width="medium")
 
